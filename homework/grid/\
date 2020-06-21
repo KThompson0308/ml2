@@ -1,0 +1,134 @@
+####################
+# ML Hwk 2
+# Author: Kevin Thompson
+# Last Updated: June 5, 2020
+###################
+
+
+# Initial Design
+
+
+import numpy as np
+from sklearn.metrics import accuracy_score
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.model_selection import KFold
+import warnings
+
+warnings.filterwarnings('ignore')
+
+X = np.array([[1,2],[3,4],[4,5],[4,5],[4,5],[4,5],[4,5],[4,5]])
+y = np.ones(X.shape[0])
+y[2:5] = 0
+n_folds = 5
+
+data = (X, y, n_folds)
+
+def run(a_clf, data, clf_hyper={}):
+    X, y, n_folds = data
+    cv = KFold(n_splits=n_folds)
+    ret = {}
+
+    for idx, (train_indices, test_indices) in enumerate(cv.split(X,y)):
+        clf = a_clf(**clf_hyper)
+        clf.fit(X[train_indices], y[train_indices])
+        pred = clf.predict(X[test_indices])
+        ret[idx] = {'clf': clf,
+                    'train_index': train_indices,
+                    'test_index': test_indices,
+                    'accuracy': accuracy_score(y[test_indices], pred)}
+    return ret
+
+results = run(RandomForestClassifier, data, clf_hyper={})
+
+################################
+# Part I:  Designing the Meme
+
+# Requirement: Dictionaries of classifiers and hyperparameters
+###############################
+
+from sklearn.linear_model import LogisticRegression
+from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
+from sklearn.model_selection import GridSearchCV, ParameterGrid
+from scipy.stats import rv_continuous, uniform
+
+
+class logUniform_generator(rv_continuous):
+    def _cdf(self, x):
+        return np.log(x/self.a)/np.log(self.b/self.a)
+
+def logUniform(a=1, b=np.exp(1)):
+    return logUniform_generator(a=a, b=b, name='logUniform')
+
+
+from sklearn.pipeline import Pipeline
+from copy import deepcopy
+
+rf_params = {'clf': RandomForestClassifier(),
+             'n_estimators': [2, 5, 10, 20],
+             'criterion': ['gini', 'entropy'],
+             'min_samples_leaf': [1, 2]}
+
+lr_params = {'clf': LogisticRegression(),
+             'C': np.array(logUniform().rvs(size=100)),
+             'penalty': ['l2', 'none'],
+             'solver': ['newton-cg', 'lbfgs']}
+
+lda_params = {'clf': LinearDiscriminantAnalysis(),
+              'solver': ['svd', 'eigen', 'lsqr']}
+
+params = [rf_params, lr_params]
+
+
+def meme(X, y, params_list, n_folds, scoring):
+    
+    tmp_params_list = deepcopy(params_list)
+    cv = KFold(n_splits=n_folds)
+    ret = list()
+    clf_info = {}
+
+    for idx, params in enumerate(tmp_params_list):
+        clf = params['clf']
+        tmp_params = {k:v for k,v in params.items() if k not in ['clf']}
+        grid = ParameterGrid(tmp_params)
+
+        for element in grid:
+            for ids, (train_indices, test_indices) in enumerate(cv.split(X,y)):
+                clf = clf.set_params(**element)
+                clf.fit(X[train_indices], y[train_indices])
+                pred = clf.predict(X[test_indices])
+                score = scoring(y[test_indices], pred)
+                clf_info[ids]  = {'clf': clf,
+                                  'train_indices': train_indices,
+                                  'test_indices': test_indices,
+                                  'score': score}
+            ret.append(clf_info)
+    print(ret[0])
+
+        
+meme(X,y,params,5, accuracy_score)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ 
